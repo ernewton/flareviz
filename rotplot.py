@@ -5,6 +5,8 @@ Created on Wed Aug 17 09:48:21 2016
 @author: enewton
 """
 
+import os
+import types
 import pickle
 import matplotlib.pylab as plt
 import matplotlib as mpl
@@ -12,7 +14,25 @@ import numpy as np
 from astropy.time import Time
 from zachopy import oned as zponed
 import math
+import seaborn as sns
 
+pgf_with_pdflatex = {
+    "pgf.texsystem": "pdflatex",
+    "pgf.preamble": [
+         r"\usepackage[utf8x]{inputenc}",
+         r"\usepackage[T1]{fontenc}",
+         r"\usepackage{mathpazo}",
+         r"\usepackage{tgpagella}",
+         ],
+    "font.family": 'texgyrepagella',
+}
+mpl.rcParams.update(pgf_with_pdflatex)
+mpl.rc('xtick', labelsize=16)
+mpl.rc('ytick', labelsize=16)
+mpl.rc('axes', labelsize=16)
+
+from matplotlib.backends.backend_pgf import FigureCanvasPgf
+mpl.backend_bases.register_backend('pdf', FigureCanvasPgf)
 
 def short_period(lc, xlim=None, days=False, save=False):
 
@@ -31,8 +51,6 @@ def short_period(lc, xlim=None, days=False, save=False):
   
   fig = plt.figure(figsize=(6,4.5))
   ax = fig.add_subplot(111)
-  mpl.rc('xtick',labelsize = 16)
-  mpl.rc('ytick',labelsize = 16)
 
   time = lc.phase_fold(binned=True) # reference to time
   yy = lc.flux_reduce(binned=True)
@@ -49,22 +67,25 @@ def short_period(lc, xlim=None, days=False, save=False):
   ax.set_ylabel('Rel. brightness (mag)', fontsize=18)
   ax.set_xlabel(xlab, fontsize=18)
   
-  y = [0.02, 0.01, 0.0, -0.01, -0.02]
-  plt.yticks(y)
+  y = [0.05, 0.04, 0.03, 0.02, 0.01, 0.0, -0.01, -0.02, -0.03, -0.04, -0.05]
+  ylab = ['5%', '4%', '3%', '2%', '1%', 'Normal', '-1%', '-2%', '-3%', '-4%', '-5%']
+  plt.yticks(y, ylab)
   plt.tight_layout()
   if save:
     plt.savefig('short_phased.jpg')
 
   
-def long_period(lc, xlim=None, alpha=0.6, binwidth=None, color='#004080', binned=False, save=False):
+def long_period(lc, xlim=None, alpha=0.4, binwidth=None, binned=False, save=False):
   
-
+  color = '#004080'
+  if binwidth:
+      color = '#b2df8a'
   lc.hjd_off = 0.
 
   fig = plt.figure(figsize=(12,5))
   ax = fig.add_subplot(111)
-  mpl.rc('xtick',labelsize = 16)
-  mpl.rc('ytick',labelsize = 16)
+
+  colors = sns.color_palette()
 
   if binned:
     xx = Time(lc.hjd_bin+2400000.5,format='jd')
@@ -75,74 +96,78 @@ def long_period(lc, xlim=None, alpha=0.6, binwidth=None, color='#004080', binned
     xxx= lc.hjd
     yy = lc.flux_reduce()
   yy = np.power(10, -1*yy/2.5)-1
-  print yy
-  ax.plot_date(xx.plot_date,yy, zorder=0,
+  ax.plot_date(xx.plot_date,yy, zorder=2,
                markeredgecolor='none', color=color, alpha=alpha)
 
   if binwidth is not None:
     xa, y, error = zponed.binto(x=xxx[np.isfinite(yy)], y=yy[np.isfinite(yy)], 
                                          sem=True, binwidth=binwidth)
     x = Time(xa+2400000.5, format='jd')
-    plt.errorbar(x.plot_date, y, error, zorder=1, 
+    gd, = np.where(error < 3*np.nanstd(error))
+    print "std of error", np.nanstd(error)
+    plt.errorbar(x[gd].plot_date, y[gd], error[gd], zorder=3, 
                  elinewidth=3, capthick=3, capsize=3, linewidth=0, color='#1f78b4')
-  y = [0.03, 0.02, 0.01, 0.0, -0.01, -0.02, -0.03]
-  ylab = ['3%', 0.02, 0.01, 0.0, -0.01, -0.02, -0.03]
+                 
+  y = [0.05, 0.04, 0.03, 0.02, 0.01, 0.0, -0.01, -0.02, -0.03, -0.04, -0.05]
+  ylab = ['5%', '4%', '3%', '2%', '1%', 'Normal', '-1%', '-2%', '-3%', '-4%', '-5%']
   plt.yticks(y, ylab)
   
   tmp = np.abs(yy) < (5*np.nanstd(np.abs(yy)))
   lim = 5*np.nanstd(np.abs(yy[tmp]))
   plt.ylim(-lim, lim)
-  print np.nanstd(np.abs(yy))    
   plt.gcf().autofmt_xdate()
   
-  ax.set_ylabel('Relative brightness (%)', fontsize=18)
-  ax.set_xlabel('Date', fontsize=18)
+  ax.set_ylabel('Relative brightness (%)', size=16, labelpad=10)
+  ax.set_xlabel('Date', size=16)
   
   plt.tight_layout()
   if save:
     plt.savefig('long_stretch.jpg')
 
-
-def star(lspm, load=True, south=False, model=False, plotlong=None):
+def star(lspm, load=True, south=False, model=False, 
+         alpha=0.4, plotlong=None, binwidth=None, binned=False):
   
-  # southern stars have a different naming convention
-  if south:
-    prefix = "2massj"
-    suffix = "daily"
-    ls = lspm
+  if type(lspm) == types.InstanceType:
+      lc = lspm
+  else:  
+      # southern stars have a different naming convention
+      if south:
+        prefix = "2massj"
+        suffix = "daily"
+        ls = lspm
+      else:
+        prefix = "lspm"
+        suffix = "lc"
+        ls = str(int(lspm))
+      
+      # load the data from pickle?
+      if load:
+        lc = pickle.load( open("data/"+prefix+ls+".pkl", "rb") )
+      # else must read it in!
+      else:
+        f = "data/"+prefix+ls+"_"+suffix+".fits"
+        lc = melc.LightCurve(f, id=lspm, south=south)
+        buf = lc.prep_period()
+        fit = melc.fit_period(buf, pmax=200)
+        lc.update_model(fit)
+        pickle.dump( lc, open( "data/"+prefix+ls+".pkl", "wb" ) )
 
-  else:
-    prefix = "lspm"
-    suffix = "lc"
-    ls = str(int(lspm))
-  
-  # load the data from pickle?
-  if load:
-    lc = pickle.load( open("data/"+prefix+ls+".pkl", "rb") )
-  # else must read it in!
-  else:
-    f = "data/"+prefix+ls+"_"+suffix+".fits"
-    lc = melc.LightCurve(f, id=lspm, south=south, date_lim=False)
-    buf = lc.prep_period()
-    fit = melc.fit_period(buf, pmax=200)
-    lc.update_model(fit)
-    pickle.dump( lc, open( "data/"+prefix+ls+".pkl", "wb" ) )
   plt.close()
   plt.close()
 
   if (lc.period > 10) or plotlong==True:
-    long_period(lc)
+    long_period(lc, alpha=alpha, binwidth=binwidth, binned=binned)
     if model:
+        colors = sns.color_palette()
         step = (lc.period/50)
         axrange = np.arange(plt.xlim()[0],plt.xlim()[1], step)
         y = lc.amp*np.sin(2*math.pi*(axrange)/lc.period + lc.phase)
-        plt.plot(axrange,y,c='k', zorder=1)
+        plt.plot(axrange,y,c=colors[1], zorder=1)
   else:
     short_period(lc)
 
   print "Period is: ", lc.period, "days"
   print "   ... or  ", lc.period*24, "hours"
-
 
 def add_model(lspm, south=False):
   # southern stars have a different naming convention
@@ -155,10 +180,12 @@ def add_model(lspm, south=False):
     suffix = "lc"
     ls = str(int(lspm))
   
+  colors = sns.color_palette()
   lc = pickle.load( open("data/"+prefix+ls+".pkl", "rb") )
   step = (lc.period /50)
-  axrange = np.arange(plt.xlim()[0],plt.xlim()[1], step)
+  axrange = np.arange(lc.time[0],lc.time[-1], step)+lc.hjd_off+240000.
+  xx = Time(axrange,format='jd')
   y = lc.amp*np.sin(2*math.pi*(axrange)/lc.period + lc.phase)
-  plt.plot(axrange,y,c='k', zorder=1)
+  plt.plot_date(axrange,y, linestyle='-', fmt='.', c=colors[1], zorder=1)
 
 plt.close()
