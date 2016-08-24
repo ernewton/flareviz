@@ -110,6 +110,7 @@ def star(lspm, load=True, south=False, model=False, plotlong=None):
     prefix = "2massj"
     suffix = "daily"
     ls = lspm
+
   else:
     prefix = "lspm"
     suffix = "lc"
@@ -121,7 +122,7 @@ def star(lspm, load=True, south=False, model=False, plotlong=None):
   # else must read it in!
   else:
     f = "data/"+prefix+ls+"_"+suffix+".fits"
-    lc = melc.LightCurve(f, id=lspm, south=south)
+    lc = melc.LightCurve(f, id=lspm, south=south, date_lim=False)
     buf = lc.prep_period()
     fit = melc.fit_period(buf, pmax=200)
     lc.update_model(fit)
