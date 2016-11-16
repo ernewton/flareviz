@@ -16,6 +16,8 @@ from zachopy import oned as zponed
 import math
 import seaborn as sns
 
+import mearth_lc as melc
+
 pgf_with_pdflatex = {
     "pgf.texsystem": "pdflatex",
     "pgf.preamble": [
@@ -124,7 +126,19 @@ def long_period(lc, xlim=None, alpha=0.4, binwidth=None, binned=False, save=Fals
   if save:
     plt.savefig('long_stretch.jpg')
 
-def star(lspm, load=True, south=False, model=False, 
+
+def check_best():
+  star('00445930-1516166', load=True, south=True, tel=11,
+       model=True, alpha=0.2, binned=True, binwidth=2)
+
+  star('14294291-6240465', load=True, south=True,
+       model=True, alpha=0.2, binned=True, binwidth=2)
+
+  star('10145184-4709244', load=False, south=True,
+       model=True, alpha=0.2, binned=True, binwidth=2)
+       
+  
+def star(lspm, load=True, tel=None, south=False, model=False, 
          alpha=0.4, plotlong=None, binwidth=None, binned=False):
   
   if type(lspm) == types.InstanceType:
@@ -139,18 +153,31 @@ def star(lspm, load=True, south=False, model=False,
         prefix = "lspm"
         suffix = "lc"
         ls = str(int(lspm))
-      
+      if tel:
+        suffix = "tel"+str(int(tel))+'_'+suffix
+        pickfile = "data/"+prefix+ls+"_"+str(int(tel))
+        plotfile = "plots/"+prefix+ls+"_"+str(int(tel))+'.jpg'
+      else:
+        pickfile = "data/"+prefix+ls
+        plotfile = "plots/"+prefix+ls+'.jpg'
+
+
       # load the data from pickle?
       if load:
-        lc = pickle.load( open("data/"+prefix+ls+".pkl", "rb") )
+        lc = pickle.load( open(pickfile+".pkl", "rb") )
       # else must read it in!
       else:
         f = "data/"+prefix+ls+"_"+suffix+".fits"
-        lc = melc.LightCurve(f, id=lspm, south=south)
+        print f
+        lc = melc.LightCurve(f, id=lspm, south=south, date_lim=False)
         buf = lc.prep_period()
         fit = melc.fit_period(buf, pmax=200)
         lc.update_model(fit)
-        pickle.dump( lc, open( "data/"+prefix+ls+".pkl", "wb" ) )
+        pickle.dump( lc, open(pickfile+".pkl", "wb" ) )
+        
+        f = open(pickfile+".dat","wb")
+        for x, y, yerr in zip(lc.hjd, lc.flux_reduce(), lc.eflux):
+          f.write('{0} {1} {2}\n'.format(x,y,yerr))
 
   plt.close()
   plt.close()
@@ -160,12 +187,16 @@ def star(lspm, load=True, south=False, model=False,
     if model:
         colors = sns.color_palette()
         step = (lc.period/50)
-        axrange = np.arange(plt.xlim()[0],plt.xlim()[1], step)
+        axrange = np.arange(lc.hjd[0],lc.hjd[-1], step)
+        xx = Time(axrange+2400000.5,format='jd')
         y = lc.amp*np.sin(2*math.pi*(axrange)/lc.period + lc.phase)
-        plt.plot(axrange,y,c=colors[1], zorder=1)
+        plt.plot(xx.plot_date,y,c=colors[1], zorder=2)
   else:
     short_period(lc)
 
+  plt.tight_layout()
+  plt.savefig(plotfile)
+  
   print "Period is: ", lc.period, "days"
   print "   ... or  ", lc.period*24, "hours"
 
@@ -183,9 +214,9 @@ def add_model(lspm, south=False):
   colors = sns.color_palette()
   lc = pickle.load( open("data/"+prefix+ls+".pkl", "rb") )
   step = (lc.period /50)
-  axrange = np.arange(lc.time[0],lc.time[-1], step)+lc.hjd_off+240000.
+  axrange = np.arange(lc.time[0],lc.time[-1], step)+2400000.5
   xx = Time(axrange,format='jd')
   y = lc.amp*np.sin(2*math.pi*(axrange)/lc.period + lc.phase)
-  plt.plot_date(axrange,y, linestyle='-', fmt='.', c=colors[1], zorder=1)
+  plt.plot_date(axrange,y, linestyle='-', fmt='.', c=colors[1], zorder=2)
 
 plt.close()
